@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Studio B · Tu boleto</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{ --bg-deep:#0c0a08; --surface:#17130f; --accent:#c9a24b; --accent-bright:#e8c46b; --cream:#f2e9da; --muted:#a89a82; --line:#3a3025; --red:#e0526a; }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:var(--bg-deep); color:var(--cream); font-family:'Cormorant Garamond',serif;
+    padding:24px;
+  }
+  .card{
+    background:var(--surface); border:1px solid var(--line); max-width:420px; width:100%;
+    padding:36px; text-align:center;
+  }
+  .logo{ font-family:'Bebas Neue',sans-serif; font-size:24px; letter-spacing:0.08em; color:var(--muted); margin-bottom:24px; }
+  .logo span{ color:var(--accent); }
+  h1{ font-family:'Bebas Neue',sans-serif; font-weight:400; font-size:38px; color:var(--accent-bright); letter-spacing:0.03em; margin-bottom:6px; }
+  .sub{ font-family:'Inter',sans-serif; font-size:14px; color:var(--muted); margin-bottom:24px; }
+  .qr-box{ display:flex; justify-content:center; padding:18px; background:var(--cream); margin-bottom:22px; }
+  .detalle{ font-family:'Inter',sans-serif; font-size:14px; text-align:left; border-top:1px solid var(--line); padding-top:18px; }
+  .detalle div{ display:flex; justify-content:space-between; padding:6px 0; color:var(--muted); }
+  .detalle b{ color:var(--cream); font-weight:600; text-align:right; }
+  .estado{ font-family:'Inter',sans-serif; font-size:13px; letter-spacing:0.06em; text-transform:uppercase; padding:8px 14px; display:inline-block; margin-bottom:18px; border:1px solid var(--accent); color:var(--accent-bright); }
+  .estado.pendiente{ border-color:#e0a85c; color:#e0a85c; }
+  .estado.rechazado{ border-color:var(--red); color:var(--red); }
+  .nota{ font-family:'Inter',sans-serif; font-size:12px; color:var(--muted); margin-top:18px; line-height:1.5; }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="logo">STUDIO <span>B</span></div>
+    <div id="contenido">Cargando tu boleto…</div>
+  </div>
+
+<script>
+function parseParams(){
+  const p = new URLSearchParams(window.location.search);
+  return {
+    status: p.get('collection_status') || p.get('status'),
+    externalReference: p.get('external_reference'),
+    paymentId: p.get('payment_id') || p.get('collection_id')
+  };
+}
+
+function render(){
+  const { status, externalReference, paymentId } = parseParams();
+  const cont = document.getElementById('contenido');
+
+  let datos = null;
+  try{
+    if(externalReference){
+      datos = JSON.parse(decodeURIComponent(escape(atob(externalReference))));
+    }
+  }catch(e){ console.error('No se pudo leer el folio', e); }
+
+  if(!datos){
+    cont.innerHTML = '<p class="sub">No encontramos los datos de tu compra. Si ya pagaste, no te preocupes: guardamos tu pago con Mercado Pago; escríbenos con tu comprobante para confirmar tu boleto.</p>';
+    return;
+  }
+
+  const aprobado = status === 'approved';
+  const pendiente = status === 'pending' || status === 'in_process';
+
+  let html = '';
+  if(aprobado){
+    html += '<div class="estado">Pago aprobado</div>';
+    html += '<h1>' + datos.show + '</h1>';
+    html += '<div class="sub">' + datos.func + '</div>';
+    html += '<div class="qr-box" id="qrBox"></div>';
+  } else if(pendiente){
+    html += '<div class="estado pendiente">Pago en proceso</div>';
+    html += '<h1>' + datos.show + '</h1>';
+    html += '<div class="sub">Tu boleto se activa en cuanto se confirme el pago.</div>';
+  } else {
+    html += '<div class="estado rechazado">Pago no completado</div>';
+    html += '<h1>' + datos.show + '</h1>';
+    html += '<div class="sub">Intenta comprar de nuevo desde la página principal.</div>';
+  }
+
+  html += '<div class="detalle">';
+  html += '<div><span>Folio</span><b>' + datos.folio + '</b></div>';
+  html += '<div><span>Nombre</span><b>' + datos.nombre + '</b></div>';
+  html += '<div><span>Boletos</span><b>' + datos.qty + '</b></div>';
+  html += '</div>';
+
+  if(aprobado){
+    html += '<p class="nota">Muestra este código QR en la entrada. Guarda esta pantalla o toma una captura — también puedes recuperarla con tu folio.</p>';
+  } else {
+    html += '<p class="nota">Folio de referencia para cualquier duda: ' + datos.folio + '</p>';
+  }
+
+  cont.innerHTML = html;
+
+  if(aprobado){
+    const qrTexto = 'STUDIO B | ' + datos.show + ' | ' + datos.func + ' | ' + datos.qty + ' boleto(s) | ' + datos.nombre + ' | Folio: ' + datos.folio;
+    new QRCode(document.getElementById('qrBox'), { text: qrTexto, width: 190, height: 190, colorDark: '#0c0a08', colorLight: '#f2e9da' });
+  }
+}
+render();
+</script>
+</body>
+</html>
