@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Studio B — Compradores</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root{ --bg:#0c0a08; --gold:#c9a24b; --cream:#f2e9da; --line:#3a3226; }
+  *{ box-sizing:border-box; }
+  body{ background:var(--bg); color:var(--cream); font-family:'Inter',Arial,sans-serif; margin:0; padding:24px; }
+  h1{ font-family:Georgia,serif; color:var(--gold); font-size:26px; margin-bottom:4px; }
+  .sub{ color:#9a8f7a; font-size:14px; margin-bottom:24px; }
+  .login{ display:flex; gap:8px; margin-bottom:28px; flex-wrap:wrap; }
+  input[type=password], input[type=text]{
+    background:#171310; border:1px solid var(--line); color:var(--cream);
+    padding:10px 12px; border-radius:6px; font-size:15px; min-width:220px;
+  }
+  button{
+    background:var(--gold); color:#1a140c; border:none; border-radius:6px;
+    padding:10px 18px; font-weight:bold; cursor:pointer; font-size:15px;
+  }
+  button.secundario{ background:transparent; border:1px solid var(--gold); color:var(--gold); }
+  button:hover{ opacity:0.88; }
+  .error{ color:#e37b7b; margin-bottom:16px; }
+  .grupo{ margin-bottom:32px; }
+  .grupo h2{ color:var(--gold); font-size:18px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+  .grupo h3{ color:#d8c9a3; font-size:15px; margin:16px 0 6px; }
+  table{ width:100%; border-collapse:collapse; font-size:14px; }
+  th, td{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
+  th{ color:#9a8f7a; font-weight:normal; text-transform:uppercase; font-size:11px; letter-spacing:0.5px; }
+  .total{ color:#9a8f7a; font-size:13px; margin-top:4px; }
+  .top-actions{ display:flex; gap:10px; margin-bottom:20px; }
+  #cargando{ color:#9a8f7a; }
+</style>
+</head>
+<body>
+  <h1>Studio B — Lista de compradores</h1>
+  <div class="sub">Solo muestra boletos ya pagados (estado aprobado), agrupados por show.</div>
+
+  <div class="login">
+    <input type="password" id="clave" placeholder="Contraseña de administrador">
+    <button onclick="cargarDatos()">Ver lista</button>
+  </div>
+  <div class="error" id="error"></div>
+  <div id="cargando" style="display:none;">Cargando…</div>
+
+  <div class="top-actions" id="accionesTop" style="display:none;">
+    <button class="secundario" onclick="descargarCSV()">Descargar todo en CSV</button>
+  </div>
+
+  <div id="contenido"></div>
+
+<script>
+  // Cambia esta URL por la que te dé Firebase al desplegar la función
+  // listaCompradores (mismo patrón que las otras: us-central1, nombre
+  // de la función en minúsculas al inicio del dominio .run.app)
+  const FUNCTION_URL = 'https://us-central1-studio-b-f6c8c.cloudfunctions.net/listaCompradores';
+
+  let claveActual = '';
+
+  async function cargarDatos(){
+    const clave = document.getElementById('clave').value.trim();
+    const errorEl = document.getElementById('error');
+    const cargandoEl = document.getElementById('cargando');
+    errorEl.textContent = '';
+    if(!clave){ errorEl.textContent = 'Escribe la contraseña.'; return; }
+    claveActual = clave;
+    cargandoEl.style.display = 'block';
+    document.getElementById('contenido').innerHTML = '';
+    document.getElementById('accionesTop').style.display = 'none';
+
+    try{
+      const resp = await fetch(FUNCTION_URL + '?key=' + encodeURIComponent(clave));
+      if(resp.status === 403){
+        errorEl.textContent = 'Contraseña incorrecta.';
+        cargandoEl.style.display = 'none';
+        return;
+      }
+      if(!resp.ok){ throw new Error('Error del servidor'); }
+      const datos = await resp.json();
+      pintar(datos);
+      document.getElementById('accionesTop').style.display = 'flex';
+    }catch(e){
+      errorEl.textContent = 'No se pudo cargar la lista. Intenta de nuevo.';
+      console.error(e);
+    }
+    cargandoEl.style.display = 'none';
+  }
+
+  function pintar(datos){
+    const cont = document.getElementById('contenido');
+    cont.innerHTML = '';
+
+    // Almost Maine y conciertos
+    Object.keys(datos.pedidos || {}).sort().forEach(show => {
+      const compras = datos.pedidos[show];
+      const totalBoletos = compras.reduce((a,c)=> a + (parseInt(c.cantidad)||0), 0);
+      const div = document.createElement('div');
+      div.className = 'grupo';
+      div.innerHTML = `
+        <h2>${escapeHtml(show)}</h2>
+        <div class="total">${compras.length} compra(s) · ${totalBoletos} boleto(s)</div>
+        <table>
+          <tr><th>Nombre</th><th>Correo</th><th>Cantidad</th><th>Folio</th></tr>
+          ${compras.map(c => `<tr>
+            <td>${escapeHtml(c.nombre)}</td>
+            <td>${escapeHtml(c.correo)}</td>
+            <td>${escapeHtml(String(c.cantidad))}</td>
+            <td>${escapeHtml(c.folio)}</td>
+          </tr>`).join('')}
+        </table>`;
+      cont.appendChild(div);
+    });
+
+    // Heathers, por función
+    Object.keys(datos.heathers || {}).sort().forEach(funcion => {
+      const compras = datos.heathers[funcion];
+      const totalAsientos = compras.reduce((a,c)=> a + (c.cantidad||0), 0);
+      const div = document.createElement('div');
+      div.className = 'grupo';
+      div.innerHTML = `
+        <h2>Heathers — ${escapeHtml(funcion)}</h2>
+        <div class="total">${compras.length} compra(s) · ${totalAsientos} asiento(s)</div>
+        <table>
+          <tr><th>Nombre</th><th>Correo</th><th>Asientos</th><th>Folio</th></tr>
+          ${compras.map(c => `<tr>
+            <td>${escapeHtml(c.nombre)}</td>
+            <td>${escapeHtml(c.correo)}</td>
+            <td>${escapeHtml(c.asientos)} (${c.cantidad})</td>
+            <td>${escapeHtml(c.folio)}</td>
+          </tr>`).join('')}
+        </table>`;
+      cont.appendChild(div);
+    });
+
+    if(!cont.innerHTML){
+      cont.innerHTML = '<p>Todavía no hay boletos pagados registrados.</p>';
+    }
+  }
+
+  function escapeHtml(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function descargarCSV(){
+    if(!claveActual) return;
+    window.location.href = FUNCTION_URL + '?key=' + encodeURIComponent(claveActual) + '&formato=csv';
+  }
+</script>
+</body>
+</html>
